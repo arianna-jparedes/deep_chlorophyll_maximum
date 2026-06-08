@@ -28,7 +28,7 @@ Z_DISPLAY = (70, 120)
 DAYS_PER_OUTPUT = 1.0
 
 # Spin-up
-T_SPINUP = 2000
+T_SPINUP = 1700
 
 # (kappa, label, t_display_days, seasonal)
 CONFIGS = [
@@ -39,7 +39,7 @@ CONFIGS = [
     (0.14, 'e', 2500, True),
     (0.08, 'f', 2500, True),
 ]
-KAPPA_LABEL = {'a':0.50,'b':0.20,'c':0.12,'d':0.50,'e':0.14,'f':0.08}
+KAPPA_LABEL = {'a':0.50,'b':0.18,'c':0.12,'d':0.50,'e':0.14,'f':0.08}
 
 # Runner
 def run_case(kappa, seasonal, t_display):
@@ -93,7 +93,7 @@ def save_panel(res, lbl, seasonal, out_path):
     N = res['N']
 
     Pvmax = np.nanpercentile(P, 99.5) or 1.0
-    Nvmax = 3.0
+    Nvmax = np.nanpercentile(N, 45) or 1.0
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     fig.suptitle(f'Panel {lbl} — {env} environment,  κ = {kv} cm² s⁻¹\n'
