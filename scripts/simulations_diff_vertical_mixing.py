@@ -15,22 +15,18 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 from dcm_model import DEFAULT_PARAMS, make_grid, run_simulation, Iin_seasonal
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 GRAPHS_DIR  = os.path.join(SCRIPTS_DIR, '..', 'graphs')
 os.makedirs(GRAPHS_DIR, exist_ok=True)
 
-NZ = 250 # 150
+NZ = 250
 Z = make_grid(zB=DEFAULT_PARAMS['zB'], nz=NZ)
 Z_DISPLAY = (70, 120)
-DAYS_PER_OUTPUT = 1.0
 
-# Spin-up
 T_SPINUP = 1700
 
-# (kappa, label, t_display_days, seasonal)
 CONFIGS = [
     (0.50, 'a', 2500, False),
     (0.18, 'b', 1200, False),
@@ -41,7 +37,6 @@ CONFIGS = [
 ]
 KAPPA_LABEL = {'a':0.50,'b':0.18,'c':0.12,'d':0.50,'e':0.14,'f':0.08}
 
-# Runner
 def run_case(kappa, seasonal, t_display):
     params = DEFAULT_PARAMS.copy()
     params['kappa'] = kappa
@@ -55,7 +50,7 @@ def run_case(kappa, seasonal, t_display):
                              Iin_func=fn, n_out=n_out,
                              rtol=1e-6, atol=1e-10)
 
-    # Discard the spin-up: keep only t >= T_SPINUP
+    # Discard spin-up: keep only t >= T_SPINUP
     keep  = res['t'] >= T_SPINUP
     t_out = res['t'][keep] - T_SPINUP
     return dict(t=t_out, z=res['z'],
@@ -63,11 +58,9 @@ def run_case(kappa, seasonal, t_display):
                 N=res['N'][:, keep],
                 sol=res['sol'])
 
-# Graphs
 def make_colorplot(ax, t, z, field, cmap, vmin, vmax, xlabel=True, ylabel=True):
     iz = (z >= Z_DISPLAY[0]) & (z <= Z_DISPLAY[1])
     F = field[iz, :]
-
     im = ax.imshow(F,
                    aspect='auto',
                    origin='upper',
@@ -77,58 +70,69 @@ def make_colorplot(ax, t, z, field, cmap, vmin, vmax, xlabel=True, ylabel=True):
                    interpolation='bilinear')
     ax.set_ylim(Z_DISPLAY[1], Z_DISPLAY[0])
     if ylabel:
-        ax.set_ylabel('Depth (m)', fontsize=10)
+        ax.set_ylabel('Depth (m)', fontsize=16)
     if xlabel:
-        ax.set_xlabel('Time (days)', fontsize=10)
-    ax.tick_params(labelsize=9)
-    return im
+        ax.set_xlabel('Time (days)', fontsize=16)
+    ax.tick_params(labelsize=16)
+    return im, iz
+
+
+def add_nutrient_contours(ax, t, z, N, iz, vmin, vmax, n_levels=8):
+    """Overlay contour lines on the nutrient panel using the same jet colormap
+    to highlight the oscillating wave structure."""
+    F = N[iz, :]
+    z_sub = z[iz]
+    levels = np.linspace(vmin + (vmax - vmin) * 0.05, vmax * 0.95, n_levels)
+    ax.contour(t, z_sub, F,
+               levels=levels,
+               cmap='jet', vmin=vmin, vmax=vmax,
+               linewidths=0.8, alpha=0.6)
 
 
 def save_panel(res, lbl, seasonal, out_path):
-    kv  = KAPPA_LABEL[lbl]
-    env = 'Seasonal' if seasonal else 'Constant'
-
     t = res['t']
     P = res['P'] / 1e7
     N = res['N']
 
-    Pvmax = np.nanpercentile(P, 99.5) or 1.0
-    Nvmax = np.nanpercentile(N, 45) or 1.0
+    # Compute percentiles only on the displayed depth slice (iz),
+    # so deep high-N water below the display window does not inflate vmax
+    iz = (res['z'] >= Z_DISPLAY[0]) & (res['z'] <= Z_DISPLAY[1])
+    P_disp = P[iz, :]
+    N_disp = N[iz, :]
+
+    Pvmax = np.nanpercentile(P_disp, 99.5) or 1.0
+    Nvmax = np.nanpercentile(N_disp, 98)   or 1.0
+    Nvmin = 0.0
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    fig.suptitle(f'Panel {lbl} — {env} environment,  κ = {kv} cm² s⁻¹', fontsize=12, fontweight='bold')
 
-    im0 = make_colorplot(axes[0], t, res['z'], P, 'jet', 0, Pvmax)
-    axes[0].set_title('P  (×10⁷ cells m⁻³)', fontsize=10)
+    im0, iz0 = make_colorplot(axes[0], t, res['z'], P, 'jet', 0, Pvmax)
+    axes[0].set_title('P  (×10⁷ cells m⁻³)', fontsize=16)
     axes[0].text(0.02, 0.96, lbl, transform=axes[0].transAxes,
-                 fontsize=13, fontweight='bold', va='top', color='white')
+                 fontsize=18, fontweight='bold', va='top', color='white')
     cb0 = plt.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
-    cb0.ax.tick_params(labelsize=8)
+    cb0.ax.tick_params(labelsize=14)
 
-    im1 = make_colorplot(axes[1], t, res['z'], N, 'jet', 0, Nvmax)
-    axes[1].set_title('N  (mmol nutrient m⁻³)', fontsize=10)
+    im1, iz1 = make_colorplot(axes[1], t, res['z'], N, 'jet', Nvmin, Nvmax)
+    add_nutrient_contours(axes[1], t, res['z'], N, iz1, Nvmin, Nvmax)
+    axes[1].set_title('N  (mmol nutrient m⁻³)', fontsize=16)
     cb1 = plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
-    cb1.ax.tick_params(labelsize=8)
+    cb1.ax.tick_params(labelsize=14)
 
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    plt.savefig(out_path, bbox_inches='tight')
     plt.close()
 
 def main():
     results = {}
-
     for kappa, lbl, t_display, seasonal in CONFIGS:
-        env   = 'seasonal' if seasonal else 'constant'
-        t_total = T_SPINUP + t_display
-        panel_path = os.path.join(GRAPHS_DIR, f'fig2_panel_{lbl}.png')
+        panel_path = os.path.join(GRAPHS_DIR, f'fig2_panel_{lbl}.pdf')
         try:
             res = run_case(kappa, seasonal, t_display)
-            ok  = res['sol'].success
             save_panel(res, lbl, seasonal, panel_path)
             results[lbl] = res
         except Exception:
             print(f'  FAILED:'); traceback.print_exc()
-
 
 if __name__ == '__main__':
     main()
