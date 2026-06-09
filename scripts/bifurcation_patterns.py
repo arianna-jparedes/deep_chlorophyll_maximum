@@ -9,9 +9,9 @@ Speed strategy (two phased integration per parameter value):
 import sys, os, traceback, time, warnings
 
 # Prevent BLAS/LAPACK from spawning threads
-os.environ.setdefault('OMP_NUM_THREADS',      '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
 os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
-os.environ.setdefault('MKL_NUM_THREADS',      '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -174,24 +174,24 @@ def _continuation_sweep_both_directions(param_name, param_values, extra_params, 
 def _local_extrema(signal):
     order = 100
     idx_max = argrelextrema(signal, np.greater, order=order)[0]
-    idx_min = argrelextrema(signal, np.less,    order=order)[0]
+    idx_min = argrelextrema(signal, np.less, order=order)[0]
     return signal[idx_max], signal[idx_min]
-
-def _mean_period(signal, t):
-    order = 100
-    idx = argrelextrema(signal, np.greater, order=order)[0]
-    if len(idx) < 2:
-        return np.nan
-    amp = _rel_amplitude(signal)
-    if amp < 0.05:   # stable regime
-        return np.nan
-    return np.median(np.diff(t[idx]))
 
 def _rel_amplitude(signal):
     maxs, mins = _local_extrema(signal)
     if len(maxs) == 0 or len(mins) == 0:
         return 0.0
-    return (np.mean(maxs) - np.mean(mins)) / np.mean(maxs)
+    return (np.median(maxs) - np.median(mins)) / np.median(maxs)
+
+def _mean_period(signal, t):
+    order = 100
+    idx = argrelextrema(signal, np.greater, order=order)[0]
+    if len(idx) < 2:
+        return 0.0
+    amp = _rel_amplitude(signal)
+    if amp < 0.05:
+        return 0.0
+    return np.median(np.diff(t[idx]))
 
 def _extrema_from_sweep(raw):
     bif = []
@@ -208,7 +208,6 @@ def _period_amp_from_sweep(raw):
         periods.append(_mean_period(Pint, t))
         amps.append(_rel_amplitude(Pint))
     return np.array(periods), np.array(amps)
-
 
 # Panel savers
 def save_panel_a(bif_data, kappas, out_path):
@@ -246,8 +245,8 @@ def save_panel_c(v_values, periods, amplitudes, out_path):
     fig.suptitle('Period and amplitude vs sinking velocity', fontsize=12, fontweight='bold')
     ax2 = ax.twinx()
     valid = ~np.isnan(periods)
-    ax.plot(v_values[valid], periods[valid], 'b-', lw=2, label='Period (days)')
-    ax2.plot(v_values, amplitudes, 'r-', lw=2, label='Rel. amplitude')
+    ax.plot(v_values[valid], periods[valid], 'b-', lw=2, zorder=0, label='Period (days)')
+    ax2.plot(v_values, amplitudes, 'r-', lw=2, zorder=0, label='Rel. amplitude')
     ax.set_xlabel('Sinking velocity v (m h⁻¹)', fontsize=11)
     ax.set_ylabel('Mean period of oscillation (days)', color='b', fontsize=11)
     ax2.set_ylabel('Relative amplitude', color='r', fontsize=11)
@@ -256,8 +255,16 @@ def save_panel_c(v_values, periods, amplitudes, out_path):
     ax.tick_params(axis='y', labelcolor='b')
     ax2.tick_params(axis='y', labelcolor='r')
     ax.text(0.02, 0.97, 'c', transform=ax.transAxes, fontsize=14, fontweight='bold', va='top')
+    ax.set_xlim(v_values[0], v_values[-1])
+    _osc = np.array(amplitudes) > 0.05
+    _v0  = v_values[np.where(_osc)[0][0]]   # oscillation starts
+    _v1  = 0.043  # oscillation ends
+    ax.axvspan(v_values[0], _v0, alpha=0.2, color='green', zorder=0, label='No-oscillation')
+    ax.axvspan(_v1, v_values[-1], alpha=0.2, color='teal',  zorder=0, label='Chaotic region')
+    ax.text((v_values[0]+_v0)/2, 125, 'No-oscillation\nregion', fontsize=7, ha='center', va='center', color='darkgreen', rotation=90, style='italic')
+    ax.text((_v1+v_values[-1])/2, 125, 'Chaotic\nregion',       fontsize=7, ha='center', va='center', color='teal',      rotation=90, style='italic')
     lines = ax.get_lines() + ax2.get_lines()
-    ax.legend(lines, [l.get_label() for l in lines], fontsize=9, loc='upper left')
+    ax.legend(lines, [l.get_label() for l in lines], fontsize=9, loc='lower center')
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches='tight')
     plt.close()
@@ -267,8 +274,8 @@ def save_panel_d(kappas, periods, amplitudes, out_path):
     fig.suptitle('Period and amplitude vs turbulent diffusivity', fontsize=12, fontweight='bold')
     ax2 = ax.twinx()
     valid = ~np.isnan(periods)
-    ax.plot(kappas[valid], periods[valid], 'b-', lw=2, label='Period (days)')
-    ax2.plot(kappas, amplitudes, 'r-', lw=2, label='Rel. amplitude')
+    ax.plot(kappas[valid], periods[valid], 'b-', lw=2, zorder=0,label='Period (days)')
+    ax2.plot(kappas, amplitudes, 'r-', lw=2, zorder=0, label='Rel. amplitude')
     ax.set_xlabel('Turbulent diffusivity κ (cm² s⁻¹)', fontsize=11)
     ax.set_ylabel('Mean period of oscillation (days)', color='b', fontsize=11)
     ax2.set_ylabel('Relative amplitude', color='r', fontsize=11)
@@ -277,6 +284,14 @@ def save_panel_d(kappas, periods, amplitudes, out_path):
     ax.tick_params(axis='y', labelcolor='b')
     ax2.tick_params(axis='y', labelcolor='r')
     ax.text(0.02, 0.97, 'd', transform=ax.transAxes, fontsize=14, fontweight='bold', va='top')
+    ax.set_xlim(kappas[0], kappas[-1])
+    _osc = np.array(amplitudes) > 0.05
+    _k0  = 0.11   # oscillation starts
+    _k1  = kappas[np.where(_osc)[0][-1]]  # oscillation ends
+    ax.axvspan(kappas[0], _k0, alpha=0.2, color='teal',  zorder=0, label='Chaotic region')
+    ax.axvspan(_k1, kappas[-1],  alpha=0.2, color='green', zorder=0, label='No-oscillation')
+    ax.text((kappas[0]+_k0)/2, 125, 'Chaotic\nregion',        fontsize=7, ha='center', va='center', color='teal',      rotation=90, style='italic')
+    ax.text((_k1+kappas[-1])/2, 125, 'No-oscillation\nregion', fontsize=7, ha='center', va='center', color='darkgreen', rotation=90, style='italic')
     lines = ax.get_lines() + ax2.get_lines()
     ax.legend(lines, [l.get_label() for l in lines], fontsize=9, loc='upper right')
     plt.tight_layout()
@@ -288,28 +303,28 @@ def main():
     n_workers = max(1, cpu_count())
     
     # Panel a: full κ bifurcation diagram
-    t0 = time.time()
-    kappas_a = np.linspace(0.04, 0.24, 300)
-    try:
-        raw_a = _continuation_sweep_both_directions('kappa', kappas_a, {}, 'a')
-        bif_a = _extrema_from_sweep(raw_a)
-        save_panel_a(bif_a, kappas_a, os.path.join(PANELS_DIR, 'fig3_panel_a.png'))
-    except Exception:
-        print('Panel a FAILED:'); traceback.print_exc()
+    #t0 = time.time()
+    #kappas_a = np.linspace(0.04, 0.24, 300)
+    #try:
+    #    raw_a = _continuation_sweep_both_directions('kappa', kappas_a, {}, 'a')
+    #    bif_a = _extrema_from_sweep(raw_a)
+    #    save_panel_a(bif_a, kappas_a, os.path.join(PANELS_DIR, 'fig3_panel_a.png'))
+    #except Exception:
+    #    print('Panel a FAILED:'); traceback.print_exc()
 
     # Panel b: period-doubling / chaotic window detail
-    t0 = time.time()
-    kappas_b = np.linspace(0.105, 0.130, 300)
-    try:
-        raw_b = _continuation_sweep('kappa', kappas_b, {}, 'b')
-        bif_b = _extrema_from_sweep(raw_b)
-        save_panel_b(bif_b, kappas_b, os.path.join(PANELS_DIR, 'fig3_panel_b.png'))
-    except Exception:
-        print('Panel b FAILED:'); traceback.print_exc()
+    #t0 = time.time()
+    #kappas_b = np.linspace(0.105, 0.130, 300)
+    #try:
+    #    raw_b = _continuation_sweep('kappa', kappas_b, {}, 'b')
+    #    bif_b = _extrema_from_sweep(raw_b)
+    #    save_panel_b(bif_b, kappas_b, os.path.join(PANELS_DIR, 'fig3_panel_b.png'))
+    #except Exception:
+    #    print('Panel b FAILED:'); traceback.print_exc()
 
     # Panel c: period and amplitude vs sinking velocity
     t0 = time.time()
-    v_values = np.linspace(0.025, 0.045, 50)
+    v_values = np.linspace(0.025, 0.046, 50)
     try:
         raw_c = _parallel_sweep('v', v_values, {'kappa': 0.12}, 'c', n_workers)
         per_v, amp_v = _period_amp_from_sweep(raw_c)
@@ -320,7 +335,7 @@ def main():
 
     # Panel d: period and amplitude vs turbulent diffusivity
     t0 = time.time()
-    kappas_d = np.linspace(0.11, 0.23, 50)
+    kappas_d = np.linspace(0.10, 0.23, 50)
     try:
         raw_d = _parallel_sweep('kappa', kappas_d, {}, 'd', n_workers)
         per_k, amp_k = _period_amp_from_sweep(raw_d)
