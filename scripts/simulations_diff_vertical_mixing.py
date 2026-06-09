@@ -96,8 +96,7 @@ def save_panel(res, lbl, seasonal, out_path):
     Nvmax = np.nanpercentile(N, 45) or 1.0
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    fig.suptitle(f'Panel {lbl} — {env} environment,  κ = {kv} cm² s⁻¹\n'
-                 f'Huisman et al. (2006)', fontsize=12, fontweight='bold')
+    fig.suptitle(f'Panel {lbl} — {env} environment,  κ = {kv} cm² s⁻¹', fontsize=12, fontweight='bold')
 
     im0 = make_colorplot(axes[0], t, res['z'], P, 'jet', 0, Pvmax)
     axes[0].set_title('P  (×10⁷ cells m⁻³)', fontsize=10)
@@ -121,19 +120,15 @@ def main():
     for kappa, lbl, t_display, seasonal in CONFIGS:
         env   = 'seasonal' if seasonal else 'constant'
         t_total = T_SPINUP + t_display
-        print(f'Panel {lbl}: κ={kappa} cm²/s, {env}, spinup={T_SPINUP}d + display={t_display}d ...', flush=True)
         panel_path = os.path.join(GRAPHS_DIR, f'fig2_panel_{lbl}.png')
         try:
             res = run_case(kappa, seasonal, t_display)
             ok  = res['sol'].success
-            print(f'  {"OK" if ok else "WARN"}  nfev={res["sol"].nfev}  '
-                  f'P_max={res["P"].max():.2e}  display_pts={res["t"].size}')
             save_panel(res, lbl, seasonal, panel_path)
             results[lbl] = res
         except Exception:
             print(f'  FAILED:'); traceback.print_exc()
 
-    print(f'Panels   → {GRAPHS_DIR}/')
 
 if __name__ == '__main__':
     main()
